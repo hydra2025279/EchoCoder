@@ -216,5 +216,32 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Reproduction runs and local credentials
+.env.*
+!.env.example
+**/output*/
+**/results/
+**/logs/
+**/trajectories/*
+!**/trajectories/.gitkeep
+*.sqlite
+*.sqlite3
+*.db
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Generated figures and tables from src/visualize
+/src/visualize/blocker_category/
+/src/visualize/blocker_count/
+/src/visualize/cumulative_recall/
+/src/visualize/venn_diagram/clarifycodebench/
+/src/visualize/venn_diagram/hilbench_swe/
+
+# HiL-Bench local runtime assets
+/benchmarks/hil-bench/.assets/
+/benchmarks/hil-bench/.workspaces/
+
 # Streamlit
 .streamlit/secrets.toml

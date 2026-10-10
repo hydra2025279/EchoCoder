@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echocoder"
+version = "0.1.0"
+description = "Implementation-conditioned specification completion"
+requires-python = ">=3.11"
+dependencies = ["openai", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+hilbench = [
+    "anthropic",
+    "datasets",
+    "flask",
+    "flask-cors",
+    "flask-socketio",
+    "ghapi",
+    "GitPython",
+    "huggingface_hub",
+    "jsonlines",
+    "libcst",
+    "llama-index",
+    "litellm",
+    "numpy",
+    "pandas",
+    "pydantic",
+    "pydantic-settings",
+    "python-dotenv",
+    "requests",
+    "rich",
+    "rich-argparse",
+    "ruamel.yaml",
+    "simple-parsing",
+    "swe-rex>=1.4.0",
+    "tabulate",
+    "tenacity",
+    "textual>=1.0.0",
+    "tiktoken",
+    "tqdm",
+    "unidiff",
+]
+[tool.setuptools.packages.find]
+include = ["echocoder*", "baselines*"]

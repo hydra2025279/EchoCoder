@@ -1,0 +1,159 @@
+# HiL-Bench
+
+Repo to run on the public dataset of **[HiL-Bench](https://static.scale.com/uploads/67a153343e046988406ef320/HiL_Bench.pdf)**, a benchmark designed to measure agents' ability to identify when they need to ask for help in coding tasks. Every task has blockers, ambiguities that **must** be clarified in order for the task to be solved correctly.
+
+Task types:
+
+- SQL
+- SWE
+
+Modes:
+
+- Baseline: the agent is presented with the task with blockers as is
+- Full info: the agent is given the task AND the blocker resolutions upfront
+- Ask human: the agent is presented with the task with blockers as is and has access to an `ask_human` tool to get clarifications
+
+## Setup
+
+1. Create a `uv` project venv.
+2. Copy `.env_template` to `.env` and set your provider keys.
+3. The public dataset is hosted externally on Hugging Face at [ScaleAI/hil-bench](https://huggingface.co/datasets/ScaleAI/hil-bench), not committed into this repo; download or materialize the task inputs locally and pass their path to the CLI.
+4. In each agent config YAML, set explicit hosting mode in top-level `hosting.type`:
+   - `litellm_proxy` (requires `LITELLM_BASE_URL`)
+   - `provider_direct` (requires `LITELLM_BASE_URL` to be unset)
+   - `self_hosted` (requires `agent.model.api_base` or `hosting.api_base_env`)
+5. Create configs and a `config_mappings.yaml` (see `config_mappings.example.yaml`). The configs can be for specific task type, mode, and/or model system and user prompts. **Only modify the prompts and LLM configs from the provided example config YAMLs; all other configuration fields should remain untouched.** If you do modify the prompts, make sure you keep the same set of placeholder variables.
+6. Create `judge_config.yaml` (see `judge_config.example.yaml`). This is the model hosting configuration for the `ask_human` tool and must include explicit `hosting.type` (`litellm_proxy`, `provider_direct`, or `self_hosted`).
+   - Agent self-hosted URLs can be env-driven via `hosting.api_base_env` (or set directly with `agent.model.api_base`).
+   - ask_human self-hosted URL can be env-driven via `hosting.self_hosted_base_url_env` (or set directly with `hosting.self_hosted_base_url`).
+
+## Examples of How to Run
+
+SQL only:
+
+```bash
+uv run hil sql /path/to/sql_task_dir \
+  --model openai/gpt-5.3-codex \
+  --num-workers 4 \
+  --passes 3 \
+  --all-modes \
+  --config-mapping config_mappings.yaml \
+  --judge-config judge_config.yaml \
+  --output-dir results
+```
+
+SWE only:
+
+```bash
+uv run hil swe /path/to/swe_tasks_dir \
+  --model openai/gpt-5.3-codex \
+  --num-tasks 10 \
+  --passes 3 \
+  --all-modes \
+  --config-mapping config_mappings.yaml \
+  --judge-config judge_config.yaml \
+  --output-dir results
+```
+
+SQL + SWE:
+
+```bash
+uv run hil sql /path/to/sql_task_dir \
+  --model openai/gpt-5.3-codex anthropic/claude-sonnet-4 \
+  --passes 2 \
+  --all-modes \
+  --config-mapping config_mappings.yaml \
+  --judge-config judge_config.yaml \
+  --output-dir results
+
+uv run hil swe /path/to/swe_tasks_dir \
+  --model openai/gpt-5.3-codex anthropic/claude-sonnet-4 \
+  --passes 2 \
+  --all-modes \
+  --config-mapping config_mappings.yaml \
+  --judge-config judge_config.yaml \
+  --output-dir results
+```
+
+## Reproducing Paper Metrics
+
+To reproduce `pass@3` and `ask_f1` (Figures 1 and 3 in the paper), run the benchmark with `--passes 3`.
+- `pass@3` is computed from the pass-level outputs across the requested task type(s), model(s), and mode(s).
+- `ask_f1` is computed from runs in `ask_human` mode.
+- `TKQR` and `ORA` are also computed for `ask_human` runs. One `ask_human`
+  tool call is one question turn. A turn scores a TKQR hit only when it discovers
+  a previously uncovered blocker; irrelevant and repeated questions score zero.
+  The final answer contributes a zero TKQR turn, while ORA compares only the
+  number of question turns against the number of blockers.
+- The main summary outputs are written under `<output_dir>/<run_name>/public_metrics/`.
+For example, to reproduce the public metrics for a model, run with `--passes 3` and include `ask_human` mode:
+
+```bash
+uv run hil swe /path/to/swe_tasks_dir \
+  --model openai/gpt-5.3-codex \
+  --passes 3 \
+  --all-modes \
+  --config-mapping config_mappings.yaml \
+  --judge-config judge_config.yaml \
+  --output-dir results
+```
+
+SQL can be reproduced the same way through the standard uv workflow:
+
+```bash
+uv run hil sql /path/to/sql_task_dir \
+  --model openai/gpt-5.3-codex \
+  --passes 3 \
+  --all-modes \
+  --config-mapping config_mappings.yaml \
+  --judge-config judge_config.yaml \
+  --output-dir results
+```
+
+
+## Harbor
+
+Harbor supports three modes for every task: `baseline`, `ask_human`, `full_info`.
+
+- Runnable standalone tasks (this repo): `updated_harbor_sql/hil-bench-sql_<i>-<mode>` and `updated_harbor_swe/hil-bench-swe_<j>-<mode>`
+- Registry layout (published): one dataset `scale-ai/hil-bench` containing all SQL+SWE mode tasks
+
+```bash
+# One-time setup
+uv tool install harbor
+harbor auth login
+
+
+harbor run -p updated_harbor_sql/hil-bench-sql_3-baseline \
+  -a claude-code -m anthropic/claude-opus-4-1
+harbor run -p updated_harbor_swe/hil-bench-swe_5-ask_human \
+  -a claude-code -m anthropic/claude-opus-4-1
+```
+
+For `ask_human` mode, select the judge backend with `ASK_HUMAN_BACKEND`
+(`litellm_proxy`, `provider_native`, or `vllm`) and set that backend's model,
+URL, and credential variables. `litellm_proxy` is the default. Proxy mode
+requires a caller-supplied `LITELLM_USER` and fails closed before an
+API request when it is missing. Provider-native and direct vLLM modes do not
+require proxy attribution.
+
+Registry examples:
+
+```bash
+# Run the full published dataset (all tasks)
+harbor run -d scale-ai/hil-bench@v1 -a claude-code -m anthropic/claude-opus-4-1
+
+# Run one specific published task
+harbor run -t scale-ai/hil-bench-sql_3-baseline@v1 \
+  -a claude-code -m anthropic/claude-opus-4-1
+```
+
+## Output Structure
+
+Each run writes under `<output_dir>/<run_name>/public_metrics/`:
+
+- `pass_level_metrics.csv`, including per-pass `TKQR` and `ORA` columns for
+  `ask_human` runs
+- `summary_metrics.json` (top levels: `SQL`, `SWE`, `BOTH`), including mean
+  `TKQR` and `ORA` per mode/model
+- `trajectories/<mode>/<model>/<task>/pass_<i>_trajectory.json`
